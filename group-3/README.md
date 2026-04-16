@@ -273,3 +273,94 @@ Things that weren't obvious up front and cost an iteration or two:
   round-trips.
 - **Animations overlap server calls**: `Promise.all([animate, fetch])`
   keeps the UI feeling responsive.
+
+---
+
+# One-shot regeneration prompt
+
+If you wanted to reproduce this app in a single Cursor Agent turn instead
+of the ten-prompt journey above, this is the prompt to use. It front-loads
+the design decisions we only learned through iteration (skip FastUI,
+select by index, record holds, push-your-luck fix, animation races) so
+the agent doesn't have to rediscover them.
+
+> Build a playable web-based Farkle game end-to-end. Winning score is
+> exactly **2,000 points**, 6 dice, standard push / bank / bust mechanics,
+> hot-dice resets to 6 when all six dice score. Fetch the canonical rules
+> from `https://github.com/nickmccollum/hackathon1/` (file
+> `farkle-rules.md`) before writing the scoring logic.
+>
+> ### Stack
+> - **Backend:** Python + FastAPI. No FastUI - a component framework is
+>   the wrong tool for a custom aesthetic.
+> - **Frontend:** one hand-written `static/index.html` containing HTML +
+>   CSS + vanilla JS. No build step, no framework.
+> - **Deps:** `fastapi`, `uvicorn`, `pydantic`.
+>
+> ### File layout (flat, no package)
+> - `scoring.py` - pure functions: `calculate_score(dice) -> (score, scoring_dice_count)`,
+>   `has_scoring_dice(dice) -> bool`, `get_valid_scoring_dice(dice)`.
+>   No state, no prints.
+> - `game.py` - `FarkleGame` state machine: `roll_dice`, `keep_dice`,
+>   `check_bust`, `bank`, `next_turn`, `ai_turn`, plus a
+>   `record_hold(roll_snapshot, kept_faces, points)` helper. Maintains
+>   `scores`, `turn_score`, `dice_count`, `current_roll`, `history`,
+>   `current_turn_holds`. AI is a simple greedy pick of the highest-scoring
+>   combo per roll, with a "bank if turn_score >= 300 or dice_count <= 2"
+>   heuristic.
+> - `app.py` - FastAPI app with a single module-level `FarkleGame`. JSON
+>   endpoints: `GET /api/state`, `POST /api/roll`, `POST /api/keep` (body:
+>   list of dice **indices**, not face values), `POST /api/bank`,
+>   `POST /api/ai_step`, `POST /api/reset`. Serves `static/index.html`
+>   at `/`. Every endpoint returns the full game state so the UI never
+>   needs extra round-trips.
+> - `static/index.html` - the entire frontend (see UI spec below).
+> - `test_scoring.py` - `unittest` cases for singles, 3/4/5/6-of-a-kind,
+>   three-pair, straight (1-6), and bust detection.
+> - `requirements.txt`, `README.md`.
+>
+> ### Critical behavior details (these bit us without them)
+> - **Select dice by index, never by face value.** A roll of
+>   `1,1,1,5,5,5` has six independently selectable dice. The `/api/keep`
+>   body is a list of indices into `current_roll`; resolve to faces
+>   server-side.
+> - **Clear `current_roll` after a successful keep.** Otherwise the Roll
+>   button (disabled when `current_roll.length > 0`) traps the player
+>   with no way to push their luck. `dice_count` alone drives the next
+>   roll.
+> - **Record every hold - including the AI's and including busts.** On
+>   keep, on bust, and inside `ai_turn`, call `record_hold` with the
+>   pre-keep roll snapshot, the kept faces, and the points. Before
+>   resetting `turn_score` on bust, snapshot it so history can show
+>   "lost X on bust".
+> - **Hot dice:** when `dice_count` reaches 0 mid-turn, reset to 6 and
+>   return a `hot_dice: true` flag so the UI can toast it.
+> - **Roll button label is contextual:**
+>   `Roll Dice` / `Roll N Remaining` / `Hot Dice! Roll All 6`.
+>
+> ### Visual design (single-page, dark theme)
+> - Deep navy-to-violet gradient background, red glowing "FARKLE" title.
+> - Two outlined score cards side by side (Player | AI). Active player
+>   gets a blue glow border.
+> - Pip-style dice rendered with nested divs (no images). Selected dice
+>   get an orange selection glow.
+> - Below each score card: scrollable per-player **turn history**. Each
+>   turn entry shows turn number and total (green left-border for banked,
+>   red for bust), expanded with the per-hold breakdown rendered as
+>   **mini pip-dice** - kept dice orange, unkept dimmed, bust holds
+>   red-bordered with a `BUST` tag.
+> - Right-hand **sticky scoring reference sidebar** with sections:
+>   Singles, Three of a Kind, Sets, Rules. Collapses on viewports
+>   `< 900px`.
+> - **Animated roll:** when Roll is clicked, tumble every die with a
+>   `@keyframes wobble` and random faces every ~80ms for ~700ms, then
+>   settle on the server-returned roll. Run the animation and the
+>   `fetch()` concurrently via `Promise.all` so the visual roll always
+>   plays regardless of server latency. Use a `rollAnimating` flag to
+>   make `render()` a no-op during animation, otherwise AI-turn
+>   responses will stomp animation frames.
+>
+> ### Deliverable
+> Running `pip install -r requirements.txt && uvicorn app:app --reload`
+> and opening `http://localhost:8000/` starts a fully playable game with
+> the features above. `python3 -m unittest test_scoring.py` passes.
