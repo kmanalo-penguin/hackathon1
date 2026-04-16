@@ -1,5 +1,5 @@
 import unittest
-from .scoring import calculate_score, has_scoring_dice, get_valid_scoring_dice
+from scoring import calculate_score, has_scoring_dice, get_valid_scoring_dice
 
 class TestScoring(unittest.TestCase):
     def test_singles(self):

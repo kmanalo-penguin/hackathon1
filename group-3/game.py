@@ -1,6 +1,6 @@
 import random
 from itertools import combinations
-from .scoring import calculate_score, has_scoring_dice
+from scoring import calculate_score, has_scoring_dice
 
 class FarkleGame:
     def __init__(self, target_score=2000):

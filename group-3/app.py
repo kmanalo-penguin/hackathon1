@@ -4,8 +4,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from .game import FarkleGame
-from .scoring import calculate_score
+from game import FarkleGame
+from scoring import calculate_score
 
 app = FastAPI()
 

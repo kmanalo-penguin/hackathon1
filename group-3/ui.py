@@ -1,5 +1,5 @@
 import sys
-from .game import FarkleGame
+from game import FarkleGame
 
 DICE_ART = {
     1: [" ----- ", "|     |", "|  o  |", "|     |", " ----- "],
