@@ -43,7 +43,7 @@ python3 -m unittest test_scoring.py
 | `ui.py` | Original terminal UI (kept for reference / CI). |
 | `static/index.html` | Entire frontend in one file (HTML + CSS + JS, no build). |
 | `requirements.txt` | `fastapi`, `uvicorn`, `pydantic`. |
-| `PROMPTS.md` | The ten prompts that produced this code and the pitfalls hit along the way. |
+| `PROMPTS.md` | The raw prompts that produced this code and the pitfalls hit along the way. |
 
 ## Architecture
 
@@ -63,141 +63,152 @@ python3 -m unittest test_scoring.py
 
 # Prompts Used
 
-This Farkle implementation was built iteratively in **Cursor Agent mode**.
-Each section below is a user prompt, paraphrased or quoted, followed by
-what the agent did in response. The point of this section is to show how
-the game evolved through conversation rather than a single spec - each
-prompt is short and the agent handles planning, file layout, code
-writing, and iteration.
+Below are the raw prompts from the Cursor Agent session that produced this
+app, in order. Each section is one user message, quoted verbatim, followed
+by a short note on what was produced in response. Reading top to bottom
+reconstructs how the app grew from a terminal game to the interactive web
+UI in this folder.
 
 ---
 
-## 1. Initial build
+## 1. Initial build (terminal game + decoupled architecture)
 
-> Build a playable Farkle in Python. 6 dice, standard push / bank / bust
-> mechanics, first to **2,000** points wins. Fetch the scoring rules from
-> `https://github.com/nickmccollum/hackathon1/` before writing the scoring
-> logic. Recommended enhancements: decoupled architecture (so the UI can
-> be swapped later) and ASCII-art dice.
+> ### Git Workflow & Safety Constraints
+> 0. **Target Repository:** `None` (Ensure you are working in the correct local clone of this repository).
+> 1. Check out the latest `main` branch and pull the latest changes.
+> 2. Create and switch to a new branch named `FIELDENG-1264`.
+> 3. Implement the requested changes and commit them locally.
+> 4. **CRITICAL:** Do NOT push the branch to the remote repository. Stop after committing locally.
+> 5. Provide a concise summary of the work completed.
+>
+> ### Context
+> We need to build a playable version of the dice game Farkle in Python. The game uses 6 dice. The goal is to be the first to reach 2,000 points. On a turn, a player rolls dice, sets aside scoring dice to accumulate points, and can either "bank" those points or "push their luck" by rolling the remaining dice. If a roll yields no scoring dice, they "bust" and lose all unbanked points for that turn.
+>
+> ### Original Strict Requirements
+> 1. Implement the core game logic for Farkle in Python.
+> 2. Build a text-based, terminal UI for the game.
+> 3. The winning score threshold must be exactly 2,000 points.
+> 4. You must implement the standard Farkle push/bank/bust mechanics.
+> 5. Fetch and read the specific scoring rules from `https://github.com/nickmccollum/hackathon1/` before implementing the scoring logic.
+>
+> ### AI Recommended Enhancements
+> 1. **Decoupled Architecture:** Keep the core game logic, scoring engine, and terminal UI completely separate. We may need to swap the terminal UI for a Python GUI or web interface later.
+> 2. **ASCII Dice:** Implement a simple ASCII art display for the dice in the terminal to improve the user experience.
+>
+> ### Instructions for IDE LLM
+> 1. Use the WebFetch or Shell tool to read the README/rules from `https://github.com/nickmccollum/hackathon1/` to get the exact scoring combinations.
+> 2. Create the core scoring logic and write a few basic unit tests to verify it works.
+> 3. Implement the game state manager and the terminal UI loop.
+> 4. Follow the Git Workflow constraints strictly.
 
-Agent fetched `farkle-rules.md` from the hackathon repo, then created:
-
-- `scoring.py` - pure functions for `calculate_score`, `has_scoring_dice`.
-- `game.py` - `FarkleGame` state machine with roll / keep / bank / bust
-  / hot-dice and a simple AI opponent.
-- `ui.py` - terminal loop with ASCII dice.
-- `test_scoring.py` - unit tests across singles, 3/4/5/6 of a kind,
-  three-pair, straight, and bust detection.
+**Delivered:** `scoring.py` (pure functions), `game.py` (state machine
+with AI opponent, hot dice, bust handling), `ui.py` (terminal loop with
+ASCII dice), `test_scoring.py` (unit tests covering singles, 3/4/5/6 of
+a kind, three-pair, straight, bust). The decoupling request is what
+made every later UI swap cheap.
 
 ---
 
-## 2. Migrate to a web UI
+## 2. Move off the terminal
 
-> Let's transfer to a FastUI / React-style web frontend with clickable
-> dice selection.
+> Let's tranfser to a FastUI and React backend with an ability to select the dice
 
-First pass used [FastUI](https://github.com/pydantic/FastUI). The agent
-later replaced it once the styling target became specific.
+**Delivered:** first web version using FastAPI + FastUI. Dice became
+clickable via a FastUI form.
 
 ---
 
 ## 3. Scoring reference page
 
-> A scoring reference is also needed on a page.
+> A scoring reference is also needed on a page
 
-Added a `/rules` page with the full scoring table.
+**Delivered:** `/rules` page with the full scoring table.
 
 ---
 
-## 4. Match a target aesthetic
+## 4. Match a specific aesthetic
 
-A screenshot was attached showing deep-navy/violet theme, red "FARKLE"
-title, outlined score cards with an active-player glow, pip-style dice
-that highlight in orange when selected, and an inline scoring card.
+An image was attached (deep-navy/violet background, red "FARKLE" title,
+outlined score cards with an active-player glow, pip-style dice, inline
+scoring card).
 
-> I want to match this aesthetic with selectable dice.
+> I want to match this aesthetic with selectable dice
 
-Agent replaced FastUI with a hand-written single-page frontend served
-from FastAPI:
-
-- JSON API: `/api/state`, `/api/roll`, `/api/keep`, `/api/bank`,
-  `/api/ai_step`, `/api/reset`.
-- Dice are clickable, with selection tracked **by index** so duplicate
-  faces stay independently selectable.
-- Custom CSS approximates the screenshot (gradient background, red
-  glow title, blue active-player border, orange selection glow).
+**Delivered:** FastUI scrapped. Replaced with a hand-written
+single-page frontend (`static/index.html`) served by FastAPI, plus a
+JSON API (`/api/state`, `/api/roll`, `/api/keep`, `/api/bank`,
+`/api/ai_step`, `/api/reset`). Dice are tracked by index so duplicate
+faces stay independently selectable.
 
 ---
 
 ## 5. Turn history
 
-> Would it add value to show turn history on the left for player and right
-> for AI?
+> Would it add value to show turn history on the left for player and right for AI?
 
-Agent offered two options (outer sidebars vs inline in each score card).
-User picked **option 2** - compact scrollable turn lists **below each
-score**. Color-coded left border (green banked, red bust) and turn
-numbering.
+Offered two layouts: outer sidebars vs inline under each score card.
+
+> 2
+
+**Delivered:** compact scrollable turn lists under each score card.
+Green left-border for banked turns, red for busts, numbered per turn.
 
 ---
 
 ## 6. Scoring reference as a sidebar
 
-> How one should/could score should be a sidebar.
+> How one should/could score should be a sidebar
 
-Lifted the inline scoring card into a sticky right-hand sidebar with
-sectioned lists (Singles, Three of a Kind, Sets, Rules).
+**Delivered:** inline scoring card moved to a sticky right-hand
+sidebar, split into Singles / Three of a Kind / Sets / Rules sections.
+Collapses on narrow viewports.
 
 ---
 
 ## 7. Richer turn history
 
-> Turn history needs to convey details on how scoring occurred from either
-> opponent, it's better to understand how one is losing or winning.
+> Turn history needs to convey details on how scoring occurred from either opponent, it's better to understand how one is losing or winning compared to their opponent
 
-Each turn entry expanded to include the per-hold breakdown: the roll,
-the dice kept, and the points earned. Backend now records a `holds`
-list on every bank / bust history entry.
+**Delivered:** every turn entry expanded to show the per-hold
+breakdown (the roll, the dice kept, points earned). `game.py` now
+records a `holds` list on every bank / bust event, including the AI's.
 
 ---
 
 ## 8. Graphical dice in history
 
-> +1 idea: show the dice graphically in the history, same style as the
-> playing dice.
+> +1 idea: For turn history, can you show the dice graphically like how we select dice for the playing
 
-Replaced text-based roll listings with mini pip-dice. Kept dice render
-with the orange glow matching the selection style; unkept dice are
-dimmed; bust holds render with a red border and a `BUST` label.
+**Delivered:** text roll listings replaced with mini pip-dice matching
+the playing dice style. Kept dice glow orange, unkept are dimmed, bust
+holds get a red border and a `BUST` tag.
 
 ---
 
 ## 9. Push-your-luck bug
 
-> We should be able to re-roll the unselected dice.
+> "Push your luck - roll the remaining dice, hoping to score more."
+>
+> We have an issue in which we should be able to re-roll the unselected die
 
-The `/api/keep` endpoint was leaving unselected dice in `current_roll`,
-which kept the Roll button disabled - trapping the player between Keep
-and Bank with no way to push their luck. Fix:
-
-- Clear `current_roll` after a successful keep; `dice_count` already
-  tracks remaining dice to roll.
-- Roll button label becomes contextual:
-  `Roll Dice` / `Roll N Remaining` / `Hot Dice! Roll All 6`.
-- Hot-dice toast fires when all six dice score.
+**Delivered:** `/api/keep` was leaving unselected dice in
+`current_roll`, which made the Roll button stay disabled. Fix: clear
+`current_roll` on keep, rely on `dice_count` alone. Roll button label
+became contextual (`Roll Dice` / `Roll N Remaining` /
+`Hot Dice! Roll All 6`). Added hot-dice toast.
 
 ---
 
 ## 10. Animated roll
 
-> Roll dice should be graphically animated (at most a second, but change
-> random pips until final result).
+> Roll dice should be graphically animated (at most a second, but change random pips until final result)
 
-Dice now tumble (random faces every 80ms with a wobble keyframe) for
-~700ms before settling on the server-returned roll. The `fetch()` and
-the animation run in parallel via `Promise.all`, so the user always
-sees a full visual roll regardless of server latency. Buttons disable
-during the animation.
+**Delivered:** dice tumble (random faces every 80ms via a wobble
+keyframe) for ~700ms before settling on the server-returned roll. The
+animation and the `fetch()` run concurrently (`Promise.all`), so the
+visual roll plays regardless of server latency. Buttons disable during
+the animation; a `rollAnimating` flag keeps `render()` from stomping
+the animation frames.
 
 ---
 
@@ -205,51 +216,46 @@ during the animation.
 
 Things that weren't obvious up front and cost an iteration or two:
 
-- **FastUI was the wrong choice for a custom aesthetic.** The first web
-  migration (prompt #2) used FastUI. It works for generic admin UIs, but
-  once the target became a specific dark-purple, pixel-precise theme
-  (prompt #4), the agent scrapped FastUI entirely and wrote a plain HTML
-  / CSS / JS single-page frontend served as a static file from FastAPI.
-  **Lesson:** if you already know you want custom styling, reach for
-  plain HTML up front rather than a component framework.
+- **FastUI was the wrong choice for a custom aesthetic.** The first
+  web migration (prompt #2) used FastUI. It works for generic admin
+  UIs, but once the target became a specific dark-purple, pixel-precise
+  theme (prompt #4), FastUI was scrapped in favor of plain
+  HTML / CSS / JS served as a static file from FastAPI.
 
-- **`uvicorn farkle.app:app` broke with `ModuleNotFoundError`.** Running
-  the app as a package changed `game` and `scoring` from top-level
-  modules into package-relative ones. Had to convert
-  `from game import ...` -> `from .game import ...` across every file and
-  add `__init__.py`. Easy fix once you see it, but `uvicorn` doesn't
-  give a helpful hint. (Then when we moved the code into the flat
-  `group-3/` folder we had to reverse the switch, because `group-3` has
-  a hyphen and can't be a Python package name.)
+- **`uvicorn farkle.app:app` broke with `ModuleNotFoundError`.**
+  Running the app as a package changed `game` and `scoring` from
+  top-level modules into package-relative ones, requiring
+  `from .game import ...` and an `__init__.py`. Moving into the flat
+  `group-3/` folder for the PR reversed the switch - `group-3` has a
+  hyphen and can't be a Python package name, so the imports went back
+  to absolute.
 
 - **Selecting dice by face value doesn't work when faces repeat.** A
-  roll of `1, 1, 1, 5, 5, 5` has six distinct selectable dice, not two.
-  Early code passed `kept_faces` (a list of face values) to the keep
-  endpoint, which is ambiguous. Fixed by sending **indices** from the
-  frontend and resolving them to faces server-side.
+  roll of `1, 1, 1, 5, 5, 5` has six distinct selectable dice, not
+  two. Early code passed `kept_faces` (a list of face values) to the
+  keep endpoint, which is ambiguous. Fixed by sending **indices** from
+  the frontend and resolving them to faces server-side.
 
 - **Recording "how much was lost on a bust" has a sequencing trap.**
   `check_bust()` resets `turn_score` to `0` and calls `next_turn()`.
-  Adding history required capturing the soon-to-be-lost turn_score
+  Adding history required capturing the soon-to-be-lost `turn_score`
   **before** the reset, not after.
 
 - **Push-your-luck was silently blocked.** After a keep, the backend
   kept the unselected dice in `current_roll`, which made the frontend
-  disable the Roll button (`roll.length > 0`). The player had no way to
-  re-roll. Fix: clear `current_roll` on keep and rely on `dice_count`
-  alone to drive the next roll.
+  disable the Roll button (`roll.length > 0`). Fix: clear
+  `current_roll` on keep and rely on `dice_count` alone.
 
 - **Animation races with `render()`.** While dice are tumbling, the AI
   turn completion or a parallel `render()` call could overwrite the
-  animation frames. A single `rollAnimating` flag that makes `render()`
-  a no-op during animation solved it.
+  animation frames. A single `rollAnimating` flag that makes
+  `render()` a no-op during animation solved it.
 
 - **AI history needed the same hold-recording as the player path.** The
   AI turn mutates state directly inside `game.py`, not through the
   `/api/keep` endpoint. Without explicitly calling `record_hold()` in
   `ai_turn()`, the AI's history entries had no detail - just the final
-  bank/bust total. Easy to miss because the feature worked for the
-  player first.
+  bank/bust total.
 
 ---
 
